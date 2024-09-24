@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Mensajería Profesional con Asistente IA y Llamadas</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        .chat-messages {
+            height: calc(100vh - 480px);
+            overflow-y: auto;
+        }
+        .message-list {
+            height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+        .ai-assistant, .webrtc-call {
+            height: auto;
+            overflow-y: auto;
+        }
+        .settings-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+    <!-- Agregar la biblioteca JsSIP -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jssip/3.9.0/jssip.min.js"></script>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row vh-100">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block bg-light sidebar">
+                <div class="position-sticky pt-3">
+                    <h3 class="px-3 mb-3">Mensajería</h3>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#">
+                                <i class="fas fa-inbox me-2"></i> Bandeja de entrada
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="fas fa-paper-plane me-2"></i> Enviados
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="fas fa-archive me-2"></i> Archivados
+                            </a>
+                        </li>
+                    </ul>
+                    <!-- WebRTC Call Section -->
+                    <div class="card mt-3">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="card-title mb-0"><i class="fas fa-phone-alt me-2"></i>Llamada</h5>
+                        </div>
+                        <div class="card-body webrtc-call">
+                            <div class="text-center mb-3">
+                                <input type="text" id="dialDisplay" class="form-control" readonly>
+                            </div>
+                            <div class="d-flex justify-content-center mb-3">
+                                <button class="btn btn-danger btn-sm me-2" onclick="endCall()"><i class="fas fa-phone-slash"></i></button>
+                                <button class="btn btn-secondary btn-sm me-2" onclick="muteAudio()"><i class="fas fa-microphone-slash"></i></button>
+                                <button class="btn btn-warning btn-sm me-2" onclick="holdCall()"><i class="fas fa-pause"></i></button>
+                                <button class="btn btn-info btn-sm me-2" onclick="transferCall()"><i class="fas fa-exchange-alt"></i></button>
+                            </div>
+                            <div class="d-flex justify-content-center">
+                                <div class="border p-2" style="width: 180px;">
+                                    <div class="row g-1">
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('1')">1</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('2')">2</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('3')">3</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('4')">4</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('5')">5</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('6')">6</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('7')">7</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('8')">8</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('9')">9</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('*')">*</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('0')">0</button></div>
+                                        <div class="col-4"><button class="btn btn-outline-secondary btn-sm w-100" onclick="dialNumber('#')">#</button></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-center mt-2">
+                                <button class="btn btn-danger btn-sm" onclick="clearDialDisplay()"><i class="fas fa-backspace"></i> Borrar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                    <h1 class="h2">Mensajes</h1>
+                    <div class="btn-toolbar mb-2 mb-md-0">
+                        <button type="button" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Nuevo mensaje
+                        </button>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Message List -->
+                    <div class="col-md-4 message-list border-end">
+                        <div class="list-group list-group-flush">
+                            <a href="#" class="list-group-item list-group-item-action active" aria-current="true">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h5 class="mb-1">Cliente 1</h5>
+                                    <small>3 días</small>
+                                </div>
+                                <p class="mb-1">Último mensaje recibido...</p>
+                                <small><i class="fab fa-whatsapp text-success"></i> WhatsApp</small>
+                            </a>
+                            <a href="#" class="list-group-item list-group-item-action">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h5 class="mb-1">Cliente 2</h5>
+                                    <small>5 días</small>
+                                </div>
+                                <p class="mb-1">Otro mensaje recibido...</p>
+                                <small><i class="fas fa-sms text-primary"></i> SMS</small>
+                            </a>
+                            <!-- Más elementos de lista aquí -->
+                        </div>
+                    </div>
+
+                    <!-- Chat Area -->
+                    <div class="col-md-8">
+                        <div class="card mb-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">Chat con Cliente 1</h5>
+                                <button class="btn btn-success btn-sm" onclick="realizarLlamadaSIP()">
+                                    <i class="fas fa-phone"></i> Llamar (SIP)
+                                </button>
+                            </div>
+                            <div class="card-body chat-messages">
+                                <div class="d-flex mb-3">
+                                    <div class="flex-shrink-0">
+                                        <img src="/api/placeholder/32/32" class="rounded-circle" alt="User Avatar">
+                                    </div>
+                                    <div class="flex-grow-1 ms-3">
+                                        <div class="bg-light p-2 rounded">
+                                            <p class="mb-0">Hola, necesito ayuda con mi pedido #12345. No ha llegado aún y ya pasaron 5 días.</p>
+                                        </div>
+                                        <small class="text-muted">10:30</small>
+                                    </div>
+                                </div>
+                                <div class="d-flex mb-3 justify-content-end">
+                                    <div class="flex-grow-1 me-3">
+                                        <div class="bg-primary p-2 rounded text-white">
+                                            <p class="mb-0">Entiendo su preocupación. Déjeme revisar el estado de su pedido.</p>
+                                        </div>
+                                        <small class="text-muted">10:32</small>
+                                    </div>
+                                </div>
+                                <!-- Más mensajes aquí -->
+                            </div>
+                            <div class="card-footer">
+                                <form>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control" placeholder="Escribe un mensaje...">
+                                        <button class="btn btn-primary" type="button">Enviar</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- AI Assistant Section -->
+                        <div class="card">
+                            <div class="card-header bg-info text-white">
+                                <h5 class="card-title mb-0"><i class="fas fa-robot me-2"></i>Asistente IA</h5>
+                            </div>
+                            <div class="card-body ai-assistant">
+                                <h6 class="card-subtitle mb-2 text-muted">Sugerencias basadas en la conversación:</h6>
+                                <ul class="list-group">
+                                    <li class="list-group-item">
+                                        <strong>Problema detectado:</strong> Retraso en la entrega del pedido #12345
+                                    </li>
+                                    <li class="list-group-item">
+                                        <strong>Acción sugerida:</strong> Verificar el estado del envío en el sistema de logística
+                                    </li>
+                                    <li class="list-group-item">
+                                        <strong>Respuesta propuesta:</strong> "Lamento la demora en su pedido. He verificado que el pedido #12345 está actualmente en tránsito y se espera que sea entregado mañana. ¿Le gustaría que le proporcione el número de seguimiento?"
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal para marcar como leído -->
+    <div class="modal fade" id="readModal" tabindex="-1" aria-labelledby="readModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="readModalLabel">Marcar como leído</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Selecciona la fecha en que se leyó este mensaje:</p>
+                    <input type="date" class="form-control" id="readDate">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botón de configuración -->
+    <button class="btn btn-primary settings-button" data-bs-toggle="modal" data-bs-target="#settingsModal">
+        <i class="fas fa-cog"></i> Configuración
+    </button>
+
+    <!-- Modal de configuración -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="settingsModalLabel">Configuración de Usuario SIP</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="sipSettingsForm">
+                        <div class="mb-3">
+                            <label for="sipUri" class="form-label">URI SIP</label>
+                            <input type="text" class="form-control" id="sipUri" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sipPassword" class="form-label">Contraseña</label>
+                            <input type="password" class="form-control" id="sipPassword" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sipWsServers" class="form-label">Servidor WebSocket</label>
+                            <input type="text" class="form-control" id="sipWsServers" required 
+                                   placeholder="wss://sip.ejemplo.com:8089">
+                            <small class="form-text text-muted">
+                                Formato: wss://dominio:puerto. Ejemplo: wss://sip.ejemplo.com:8089
+                            </small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sipDisplayName" class="form-label">Nombre para mostrar</label>
+                            <input type="text" class="form-control" id="sipDisplayName">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    <button type="button" class="btn btn-primary" onclick="guardarConfiguracionSIP()">Guardar cambios</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Configuración inicial de SIP
+        let sipConfig = {};
+        let ua; // User Agent de JsSIP
+
+        // Función para solicitar permisos de audio
+        function solicitarPermisosAudio() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(function(stream) {
+                    console.log('Permisos de audio concedidos');
+                    stream.getTracks().forEach(track => track.stop());
+                })
+                .catch(function(err) {
+                    console.error('Error al solicitar permisos de audio:', err);
+                });
+        }
+
+        // Función para iniciar la conexión SIP
+        function iniciarConexionSIP() {
+            if (!sipConfig.uri || !sipConfig.ws_servers) {
+                console.log('Configuración SIP incompleta');
+                return;
+            }
+
+            // Asegúrate de que todas las propiedades necesarias estén presentes
+            const config = {
+                uri: sipConfig.uri,
+                password: sipConfig.password,
+                ws_servers: sipConfig.ws_servers,
+                display_name: sipConfig.display_name || '',
+                authorization_user: sipConfig.authorization_user || sipConfig.uri.split(':')[1].split('@')[0],
+                register: true,
+                register_expires: 300
+            };
+
+            try {
+                JsSIP.debug.enable('JsSIP:*'); // Habilita el modo de depuración para ver más detalles
+
+                // Crear una nueva instancia de UA
+                ua = new JsSIP.UA(config);
+
+                ua.on('registered', function(e) {
+                    console.log('Registrado exitosamente en SIP');
+                });
+
+                ua.on('registrationFailed', function(e) {
+                    console.error('Fallo en el registro SIP:', e.cause);
+                });
+
+                // Manejo de errores de conexión
+                ua.on('disconnected', function(e) {
+                    console.error('Desconectado del servidor SIP:', e.cause);
+                });
+
+                ua.on('connected', function(e) {
+                    console.log('Conectado al servidor SIP');
+                });
+
+                // Iniciar la conexión
+                ua.start();
+            } catch (error) {
+                console.error('Error al iniciar la conexión SIP:', error);
+            }
+        }
+
+        // Función para guardar la configuración SIP
+        function guardarConfiguracionSIP() {
+            const sipUri = document.getElementById('sipUri').value;
+            const sipPassword = document.getElementById('sipPassword').value;
+            const sipWsServers = document.getElementById('sipWsServers').value;
+            const sipDisplayName = document.getElementById('sipDisplayName').value;
+
+            // Validar que los campos requeridos no estén vacíos
+            if (!sipUri || !sipPassword || !sipWsServers) {
+                alert('Por favor, complete todos los campos obligatorios.');
+                return;
+            }
+
+            // Extraer el nombre de usuario y dominio de la URI SIP
+            const uriParts = sipUri.split('@');
+            if (uriParts.length !== 2) {
+                alert('El formato de la URI SIP es incorrecto. Debe ser sip:usuario@dominio.com');
+                return;
+            }
+
+            const authorizationUser = uriParts[0].split(':')[1];
+            const domain = uriParts[1];
+
+            sipConfig = {
+                uri: sipUri,
+                password: sipPassword,
+                ws_servers: sipWsServers,
+                display_name: sipDisplayName,
+                authorization_user: authorizationUser,
+                domain: domain
+            };
+
+            // Guardar en localStorage
+            localStorage.setItem('sipConfig', JSON.stringify(sipConfig));
+
+            // Reiniciar la conexión SIP con la nueva configuración
+            if (ua) {
+                ua.stop();
+            }
+            iniciarConexionSIP();
+
+            // Cerrar el modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('settingsModal'));
+            modal.hide();
+
+            console.log('Configuración SIP actualizada y guardada:', sipConfig);
+            alert('Configuración SIP guardada correctamente.');
+        }
+
+        // Cargar la configuración al iniciar la página
+        window.onload = function() {
+            solicitarPermisosAudio();
+            const savedConfig = localStorage.getItem('sipConfig');
+            if (savedConfig) {
+                sipConfig = JSON.parse(savedConfig);
+                document.getElementById('sipUri').value = sipConfig.uri || '';
+                document.getElementById('sipPassword').value = sipConfig.password || '';
+                document.getElementById('sipWsServers').value = sipConfig.ws_servers || '';
+                document.getElementById('sipDisplayName').value = sipConfig.display_name || '';
+                console.log('Configuración SIP cargada:', sipConfig);
+                iniciarConexionSIP();
+            }
+        };
+
+        let currentSession; // Sesión de llamada actual
+
+        // Función para iniciar una llamada SIP
+        function startCall() {
+            const numeroDestino = document.getElementById('dialDisplay').value;
+            if (!numeroDestino) {
+                console.error('Por favor, ingrese un número para llamar');
+                return;
+            }
+
+            const opciones = {
+                mediaConstraints: { audio: true, video: false }
+            };
+
+            currentSession = ua.call(`sip:${numeroDestino}@${sipConfig.domain}`, opciones);
+
+            currentSession.on('connecting', function() {
+                console.log('Llamada SIP conectando...');
+            });
+
+            currentSession.on('progress', function() {
+                console.log('Llamada SIP en progreso...');
+            });
+
+            currentSession.on('accepted', function() {
+                console.log('Llamada SIP aceptada');
+            });
+
+            currentSession.on('ended', function() {
+                console.log('Llamada SIP finalizada');
+                currentSession = null;
+            });
+
+            currentSession.on('failed', function(e) {
+                console.error('Llamada SIP fallida:', e.cause);
+                currentSession = null;
+            });
+        }
+
+        // Function to end the call
+        function endCall() {
+            if (currentSession) {
+                currentSession.terminate();
+            }
+            console.log('Llamada terminada');
+        }
+
+        // Function to mute/unmute audio
+        function muteAudio() {
+            if (currentSession) {
+                currentSession.mute({ audio: true });
+                console.log('Audio silenciado');
+            }
+        }
+
+        // Function to dial a number
+        function dialNumber(number) {
+            let dialDisplay = document.getElementById('dialDisplay');
+            dialDisplay.value += number;
+            console.log('Número marcado:', number);
+        }
+
+        // Function to clear the dial display
+        function clearDialDisplay() {
+            document.getElementById('dialDisplay').value = '';
+            console.log('Pantalla de marcado limpiada');
+        }
+
+        // Function to hold the call
+        function holdCall() {
+            if (currentSession) {
+                currentSession.hold();
+                console.log('Llamada puesta en espera');
+            }
+        }
+
+        // Function to transfer the call
+        function transferCall() {
+            if (currentSession) {
+                const transferTo = prompt("Ingrese el número para transferir:");
+                if (transferTo) {
+                    currentSession.refer(`sip:${transferTo}@${sipConfig.domain}`);
+                    console.log('Transferencia de llamada iniciada');
+                }
+            }
+        }
+
+        // Función para realizar una llamada SIP
+        function realizarLlamadaSIP() {
+            if (!ua) {
+                console.error('La conexión SIP no está inicializada');
+                return;
+            }
+
+            const numeroDestino = document.getElementById('dialDisplay').value;
+            if (!numeroDestino) {
+                console.error('Por favor, ingrese un número para llamar');
+                return;
+            }
+
+            const opciones = {
+                mediaConstraints: { audio: true, video: false }
+            };
+
+            currentSession = ua.call(`sip:${numeroDestino}@${sipConfig.domain}`, opciones);
+
+            currentSession.on('connecting', function() {
+                console.log('Llamada SIP conectando...');
+            });
+
+            currentSession.on('progress', function() {
+                console.log('Llamada SIP en progreso...');
+            });
+
+            currentSession.on('accepted', function() {
+                console.log('Llamada SIP aceptada');
+            });
+
+            currentSession.on('ended', function() {
+                console.log('Llamada SIP finalizada');
+                currentSession = null;
+            });
+
+            currentSession.on('failed', function(e) {
+                console.error('Llamada SIP fallida:', e.cause);
+                currentSession = null;
+            });
+        }
+
+        // Here you would add more JavaScript for updating the AI assistant suggestions dynamically
+    </script>
+</body>
+</html>
